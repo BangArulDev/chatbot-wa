@@ -1,5 +1,11 @@
 require("dotenv").config();
-const { Client, LocalAuth } = require("whatsapp-web.js");
+const {
+  default: makeWASocket,
+  useMultiFileAuthState,
+  DisconnectReason,
+  downloadMediaMessage,
+} = require("@whiskeysockets/baileys");
+const pino = require("pino");
 const qrcode = require("qrcode-terminal");
 const qrcodeImage = require("qrcode");
 const { HfInference } = require("@huggingface/inference");
@@ -8,16 +14,15 @@ const mammoth = require("mammoth");
 const pdfParse = require("pdf-parse");
 
 // ==========================================
-// 1. Keep-Alive Server (untuk UptimeRobot)
+// 1. Keep-Alive Server & Web QR Scanner
 // ==========================================
 const app = express();
-// Standar port cloud Koyeb adalah 8000
 const port = process.env.PORT || 8000;
 
-let qrCodeHtml = "<h2>Sedang memuat sistem WhatsApp (biasanya butuh waktu sekitar 1-2 menit di Render)...</h2> <p>Jika layar masih ini terus, tunggu sebentar lalu coba <b>Refresh (F5)</b> halaman ini sampai gambarnya keluar.</p>";
+let qrCodeHtml = "<h2>Sedang memuat sistem WhatsApp (menggunakan Baileys)...</h2> <p>Tunggu sebentar lalu coba <b>Refresh (F5)</b>.</p>";
 
 app.get("/", (req, res) => {
-  res.send("WhatsApp Bot is running! 🤖 Cek <b>/qr</b> untuk scan login.");
+  res.send("WhatsApp Bot (Baileys) is running! 🤖 Cek <b>/qr</b> untuk scan login.");
 });
 
 app.get("/qr", (req, res) => {
@@ -25,201 +30,198 @@ app.get("/qr", (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`🌐 Keep-alive server is listening on port ${port}`);
+  console.log(`🌐 Web server is listening on port ${port}`);
 });
 
 // ==========================================
-// 2. Setup AI (Hugging Face)
+// 2. Setup Hugging Face AI
 // ==========================================
-// Ambil token dari file .env (wajib diisi nanti)
 const hf = new HfInference(process.env.HF_TOKEN);
-
-// Kita menggunakan model Llama-3-8B-Instruct karena cukup cerdas dan sangat baik dalam percakapan
 const MODEL = "meta-llama/Meta-Llama-3-8B-Instruct";
 
-// Anda bisa mengubah isi teks di bawah ini untuk mengajari AI tentang diri Anda
 const SYSTEM_PROMPT = `Kamu adalah asisten virtual WhatsApp milik Arul (Amrully Arun Hadi).
 Kamu ramah, sopan, dan pintar. Bicaralah seperti manusia biasa menggunakan bahasa Indonesia yang santai tapi sopan (gunakan kata 'aku' dan 'kamu').
 Gunakan emoji secukupnya agar percakapan lebih hidup. Jawablah pertanyaan dengan singkat, padat, dan jelas.
 
-Jika ada yang bertanya tentang Arul, ini adalah informasi tentangnya:
-- Nama Panggilan: Arul
-- Nama Lengkap: Amrully Arun Hadi
-- Profesi: Software Developer / Programmer
-- (Anda bisa menambahkan detail lain tentang Arul disini, contoh: status, hobi, asal, dll)
+FAKTA TENTANG ARUL:
+- Arul (Amrully Arun Hadi) adalah penciptamu.
+- Arul adalah seorang programmer/developer yang handal.
 
-Jika ditanya sesuatu yang rahasia atau faktanya tidak ada di atas, katakan saja "Aku tidak tahu, coba chat langsung ke Arul ya".
-Jangan pernah mengarang informasi (jangan berhalusinasi). Berikan jawaban yang relevan dengan pertanyaan.`;
+INSTRUKSI PENTING:
+1. Jika ada yang bertanya tentang Arul, jawablah berdasarkan fakta di atas dengan bangga.
+2. Jika ditanya hal yang tidak kamu ketahui, jawablah dengan jujur bahwa kamu tidak tahu, tidak perlu ngarang.
+3. Selalu posisikan dirimu sebagai asisten pribadi Arul yang setia.`;
 
-// Penyimpanan sederhana riwayat percakapan per nomor agar bot bisa mengingat konteks percakapan
-const userMemory = new Map();
+const userMessageHistory = new Map();
+const MAX_DOC_LENGTH = 10000;
 
 // ==========================================
-// 3. Setup WhatsApp Client
+// 3. Konfigurasi Baileys (Tanpa Google Chrome)
 // ==========================================
-const client = new Client({
-  // Menyimpan session di folder lokal agar tidak perlu scan QR tiap kali restart
-  authStrategy: new LocalAuth(),
-  // Memberikan waktu ekstra 5 menit (300000ms) untuk proses scan di hp, mencegah bot pingsan mendadak
-  authTimeoutMs: 300000, 
-  qrMaxRetries: 3,       // Maksimal generasi ulang QR Code sebelum menyerah
-  puppeteer: {
-    headless: true,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-accelerated-2d-canvas",
-      "--no-first-run",
-      "--no-zygote",
-      "--disable-gpu",
-      "--proxy-server='direct://'", // Bypass proxy bawaan network cloud
-      "--proxy-bypass-list=*",
-      "--disable-features=IsolateOrigins,site-per-process", // Trik Jitu: Matikan isolasi situs hemat ratusan MB RAM!
-      "--disable-site-isolation-trials",
-      "--disable-extensions", // Matikan semua ekstensi beban
-      "--js-flags=\"--max-old-space-size=256\"", // Batasi RAM mesin V8 maksimal 256MB per tab!
-    ],
-  },
-});
+async function connectToWhatsApp() {
+  // Folder khusus Baileys untuk menyimpan sesi login
+  const { state, saveCreds } = await useMultiFileAuthState("auth_info_baileys");
 
-// Memicu pembuatan QR code di terminal saat pertama kali login
-client.on("qr", (qr) => {
-  console.log("\n📱 QR code telah berhasil digenerate! Silakan cek web /qr untuk menscan gambarnya.");
-  qrcode.generate(qr, { small: true }); // Tetap print ke terminal jaga-jaga
-  
-  qrcodeImage.toDataURL(qr, (err, url) => {
-    qrCodeHtml = `
-      <div style="font-family: sans-serif; text-align: center; margin-top: 50px;">
-        <h2>📱 Silakan Scan QR Code Ini di HP Anda!</h2>
-        <img src="${url}" style="width: 300px; height: 300px; border: 2px solid #ccc; border-radius: 10px; padding: 10px;" />
-        <p>Buka <b>WhatsApp > Perangkat Tertaut > Tautkan Perangkat</b>.</p>
-        <p><i>(Jika barcode pudar atau masa waktu habis, coba Refresh / F5 halaman ini)</i></p>
-      </div>
-    `;
+  const sock = makeWASocket({
+    auth: state,
+    printQRInTerminal: false, // Dimatikan agar kita bisa modifikasi QR nya ke terminal dan Web sekaligus
+    logger: pino({ level: "silent" }), // Supaya log terminal tidak dibanjiri kode debug Baileys
+    browser: ["Boti AI", "Chrome", "1.0.0"],
   });
-});
 
-// Event saat bot berhasil terhubung
-client.on("ready", () => {
-  console.log("✅ Bot sudah siap dan terhubung ke WhatsApp!");
-  qrCodeHtml = "<h2>✅ Bot Anda telah sukses terkoneksi! Selamat online 24 Jam!</h2> <p>Bot kini sedang online dan tidak butuh scan QR lagi.</p>";
-});
+  // Simpan login ke file secara berkala
+  sock.ev.on("creds.update", saveCreds);
 
-// Event saat bot menerima pesan baru
-client.on("message", async (message) => {
-  // Abaikan status update atau pesan broadcast (hanya balas chat langsung)
-  if (message.isStatus || message.isForwarded) return;
+  // Memantau status koneksi & mengeluarkan QR
+  sock.ev.on("connection.update", (update) => {
+    const { connection, lastDisconnect, qr } = update;
 
-  const sender = message.from;
-  let userMessage = message.body.trim();
+    if (qr) {
+      console.log("\n📱 QR code telah berhasil digenerate! Silakan cek web /qr untuk menscan gambarnya.");
+      qrcode.generate(qr, { small: true });
 
-  // Pastikan ada pesan teks
-  if (!userMessage) return;
+      qrcodeImage.toDataURL(qr, (err, url) => {
+        qrCodeHtml = `
+          <div style="font-family: sans-serif; text-align: center; margin-top: 50px;">
+            <h2>📱 Silakan Scan QR Code Ini di HP Anda!</h2>
+            <img src="${url}" style="width: 300px; height: 300px; border: 2px solid #ccc; border-radius: 10px; padding: 10px;" />
+            <p>Buka <b>WhatsApp > Perangkat Tertaut > Tautkan Perangkat</b>.</p>
+            <p><i>(Jika barcode pudar, coba Refresh / F5 halaman ini)</i></p>
+          </div>
+        `;
+      });
+    }
 
-  // Hanya membalas jika pesan mengandung kata kunci "boti" ATAU "sayang"
-  if (
-    !userMessage.toLowerCase().includes("boti") &&
-    !userMessage.toLowerCase().includes("sayang")
-  )
-    return;
+    if (connection === "close") {
+      const shouldReconnect =
+        lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
+      console.log("❌ Koneksi tertutup. Alasan:", lastDisconnect.error?.message, "| Reconnecting:", shouldReconnect);
+      
+      qrCodeHtml = "<h2>Koneksi terputus. Sedang mencoba auto-reconnect... Coba refresh sesaat lagi.</h2>";
+      
+      if (shouldReconnect) {
+        connectToWhatsApp(); // Restart bot otomatis jika error kecil
+      }
+    } else if (connection === "open") {
+      console.log("✅ Bot sudah siap dan terhubung ke WhatsApp lewat Baileys (Tanpa Chrome)!");
+      qrCodeHtml = "<h2>✅ Bot Anda telah sukses terkoneksi! Selamat online 24 Jam!</h2> <p>Bot Baileys kini sedang online dan memakan RAM super kecil.</p>";
+    }
+  });
 
-  console.log(`\n💬 Menerima pesan dari ${sender}: "${userMessage}"`);
+  // Membaca pesan masuk
+  sock.ev.on("messages.upsert", async (m) => {
+    const msg = m.messages[0];
+    // Abaikan jika pesan dari bot sendiri atau jika pesan sistem tanpa teks
+    if (!msg.message || msg.key.fromMe) return;
 
-  // Membaca file jika ada lampiran
-  if (message.hasMedia) {
+    const from = msg.key.remoteJid;
+    // Mendeteksi jenis isi pesannya (teks biasa, teks balasan, atau file)
+    const messageType = Object.keys(msg.message)[0];
+    
+    let textBody = "";
+    if (messageType === "conversation") {
+      textBody = msg.message.conversation;
+    } else if (messageType === "extendedTextMessage") {
+      textBody = msg.message.extendedTextMessage.text;
+    } else if (messageType === "documentMessage") {
+      textBody = msg.message.documentMessage.caption || "";
+    }
+
+    // Filter Trigger Kata Kunci (hanya merespons yg mengandung kata boti/sayang/rovi cantik)
+    const lowerCaseBody = textBody.toLowerCase();
+    const hasKeyword =
+      lowerCaseBody.includes("boti") ||
+      lowerCaseBody.includes("sayang") ||
+      lowerCaseBody.includes("rovi cantik");
+
+    if (!hasKeyword) return;
+
+    if (!process.env.HF_TOKEN) {
+      await sock.sendMessage(from, { text: "Maaf, konfigurasiku belum selesai. API Key Hugging Face belum dimasukkan di .env atau server." });
+      return;
+    }
+
+    console.log(`💬 Menerima pesan dari ${from.split("@")[0]}: "${textBody}"`);
+    await sock.sendMessage(from, { text: "⏳ Boti sedang memikirkan jawaban..." });
+
+    // Tangkap Lampiran Dokumen jika Ada
+    let documentText = "";
     try {
-      const media = await message.downloadMedia();
-      if (media && media.data) {
-        const buffer = Buffer.from(media.data, "base64");
+      if (messageType === "documentMessage") {
+        const docMsg = msg.message.documentMessage;
+        const mimetype = docMsg.mimetype;
+        const filename = docMsg.fileName || "Dokumen Tidak Bernama";
 
-        let extractedText = "";
-        if (media.mimetype === "text/plain") {
-          extractedText = buffer.toString("utf-8");
-        } else if (media.mimetype === "application/pdf") {
-          const pdfData = await pdfParse(buffer);
-          extractedText = pdfData.text;
-        } else if (
-          media.mimetype ===
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        if (
+          mimetype === "text/plain" ||
+          mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+          mimetype === "application/pdf"
         ) {
-          const result = await mammoth.extractRawText({ buffer });
-          extractedText = result.value;
-        }
+          // Sistem unduh gambar milik Baileys
+          const buffer = await downloadMediaMessage(msg, "buffer", {}, { logger: pino({ level: "silent" }) });
 
-        if (extractedText) {
-          // Limit teks agar tidak melebihi konteks Hugging Face (diset maksimal ~10000 karakter)
-          const MAX_DOC_LENGTH = 10000;
-          if (extractedText.length > MAX_DOC_LENGTH) {
-            extractedText =
-              extractedText.substring(0, MAX_DOC_LENGTH) +
-              "\n...[Teks terpotong karena file terlalu panjang]";
+          if (mimetype === "text/plain") {
+            documentText = buffer.toString("utf-8");
+          } else if (mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+            const result = await mammoth.extractRawText({ buffer });
+            documentText = result.value;
+          } else if (mimetype === "application/pdf") {
+            const pdfData = await pdfParse(buffer);
+            documentText = pdfData.text;
           }
-          userMessage += `\n\n[Sistem WhatsApp mendeteksi ada file terlampir. Isi file:]\n"${extractedText.trim()}"\n[Akhir Dokumen]`;
-          console.log(`📄 Berhasil membaca dokumen (${media.mimetype})`);
+
+          // Cek batas teks (Jangan paksakan AI membaca lebih dari 10.000 karakter)
+          if (documentText.length > MAX_DOC_LENGTH) {
+            documentText = documentText.substring(0, MAX_DOC_LENGTH) + "\n...[TEKS DIPOTONG KARENA TERLALU PANJANG]";
+          }
+          console.log(`📄 Berhasil membaca dokumen: ${filename}`);
         }
       }
     } catch (err) {
-      console.log("⚠️ Gagal membaca media lampiran:", err.message);
+      console.error(`❌ Gagal membaca dokumen secara Baileys:`, err.message);
     }
-  }
 
-  // Struktur awal (prompt) jika nomor user belum ada di memori map
-  if (!userMemory.has(sender)) {
-    userMemory.set(sender, [{ role: "system", content: SYSTEM_PROMPT }]);
-  }
-
-  const history = userMemory.get(sender);
-
-  // Tambahkan pesan user ke memori
-  history.push({ role: "user", content: userMessage });
-
-  // Batasi memori hingga 11 pesan terakhir (1 system + 5 user + 5 asisten)
-  // agar token API tidak kepenuhan (Context Window Llama 3)
-  if (history.length > 11) {
-    // Hapus indeks 1 dan 2 (membiarkan indeks 0 = system prompt tetap aman)
-    history.splice(1, 2);
-  }
-
-  try {
-    console.log(`⚙️  Minta jawaban ke AI Hugging Face...`);
-
-    // Memanggil API Hugging Face
-    const response = await hf.chatCompletion({
-      model: MODEL,
-      messages: history,
-      max_tokens: 3000, // Panjang jawaban maksimal (ditingkatkan agar tidak terpotong)
-      temperature: 0.7, // Kreativitas (0 = kaku, 1 = sangat variatif)
-    });
-
-    const reply = response.choices[0].message.content;
-
-    // Simpan balasan AI ke memori
-    history.push({ role: "assistant", content: reply });
-
-    // Kirim balasan ke nomor WhatsApp pengguna
-    await client.sendMessage(sender, reply);
-    console.log(`🤖 Bot membalas: "${reply}"`);
-  } catch (error) {
-    console.error("❌ Error dari Hugging Face API:", error.message);
-
-    // Cek jika errornya karena Token belum diset
-    if (
-      error.message.includes("401") ||
-      error.message.includes("Unauthorized")
-    ) {
-      console.log(
-        "⚠️ HARAP CEK: Sepertinya HF_TOKEN di file .env belum diisi atau salah.",
-      );
-      await client.sendMessage(
-        sender,
-        "Maaf, konfigurasiku belum selesai. API Key Hugging Face belum dimasukkan.",
-      );
-    } else {
-      await client.sendMessage(sender, "Maaf, mager nih nanya besok lagi aja");
+    // Susun Prompt Akhir AI
+    let finalPrompt = textBody;
+    if (documentText) {
+      finalPrompt = `Berikut adalah isi dokumen yang saya lampirkan bersamanya:\n\`\`\`\n${documentText}\n\`\`\`\n\nPertanyaanku terkait dokumen di atas: ${textBody}`;
     }
-  }
-});
 
-// Jalan bosku
-client.initialize();
+    // Manajemen histori chat
+    if (!userMessageHistory.has(from)) {
+      userMessageHistory.set(from, []);
+    }
+    const history = userMessageHistory.get(from);
+    history.push({ role: "user", content: finalPrompt });
+
+    // Batasi histori percakapan maks 10 message
+    if (history.length > 10) {
+      history.shift();
+    }
+
+    // Hubungi API Hugging Face
+    let aiReply = "";
+    try {
+      console.log("⚙️  Minta jawaban ke mesian AI Hugging Face...");
+      const response = await hf.chatCompletion({
+        model: MODEL,
+        messages: [{ role: "system", content: SYSTEM_PROMPT }, ...history],
+        max_tokens: 3000,
+        temperature: 0.7,
+      });
+
+      aiReply = response.choices[0].message.content.trim();
+      history.push({ role: "assistant", content: aiReply });
+      console.log(`🤖 Bot membalas: "${aiReply.substring(0, 30).replace(/\n/g, "")}..."`);
+    } catch (error) {
+      console.error("❌ Error Hugging Face API:", error.message);
+      aiReply = "Maaf, aku sedang pusing (ada gangguan dengan koneksi AI utama). Coba tanya lagi nanti ya! 😢";
+    }
+
+    // Kirim Balasan Akhir
+    await sock.sendMessage(from, { text: aiReply });
+  });
+}
+
+// Memulai sistem
+connectToWhatsApp();

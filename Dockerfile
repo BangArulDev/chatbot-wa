@@ -1,29 +1,20 @@
+# Gunakan image resmi Node.js versi 18 (sangat ringan, siap tempur)
 FROM node:18-bullseye-slim
 
-# Install dependencies yang dibutuhkan oleh Puppeteer (Chromium) untuk WhatsApp Web JS
-RUN apt-get update \
-    && apt-get install -y wget gnupg \
-    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
-    && sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' \
-    && apt-get update \
-    && apt-get install -y google-chrome-stable fonts-ipafont-gothic fonts-wqy-zenhei fonts-thai-tlwg fonts-kacst fonts-freefont-ttf libxss1 \
-      --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/*
-
-# Buat dan pindah ke working directory untuk aplikasi
+# Set direktori kerja di dalam kontainer
 WORKDIR /usr/src/app
 
-# Salin package.json dan package-lock.json
+# Salin file konfigurasi npm (package.json dan package-lock.json jika ada)
 COPY package*.json ./
 
-# Install dependensi node (termasuk whatsapp-web.js dll)
+# Install dependensi (Kini jauh lebih cepat karena murni instalasi NPM, bebas instalasi sistem operasi Chrome yang berat)
 RUN npm install
 
-# Salin seluruh kode sisa proyek
+# Salin seluruh sisa kode eksekusi
 COPY . .
 
-# Ekspose port 8000 untuk server Express (menyesuaikan tipe infrastruktur Koyeb)
+# Ekspose port 8000 untuk server Express (menyesuaikan tipe infrastruktur cloud seperti Koyeb/Render)
 EXPOSE 8000
 
-# Jalankan index.js
+# Perintah menjalankan index.js
 CMD [ "npm", "start" ]
