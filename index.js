@@ -60,6 +60,9 @@ const userMemory = new Map();
 const client = new Client({
   // Menyimpan session di folder lokal agar tidak perlu scan QR tiap kali restart
   authStrategy: new LocalAuth(),
+  // Memberikan waktu ekstra 5 menit (300000ms) untuk proses scan di hp, mencegah bot pingsan mendadak
+  authTimeoutMs: 300000, 
+  qrMaxRetries: 3,       // Maksimal generasi ulang QR Code sebelum menyerah
   puppeteer: {
     headless: true,
     // Argumen tambahan untuk mencegah ERR_NAME_NOT_RESOLVED di cloud (Hugging Face / Docker)
