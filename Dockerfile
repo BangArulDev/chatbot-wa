@@ -1,5 +1,5 @@
-# Gunakan image resmi Node.js versi 18 (sangat ringan, siap tempur)
-FROM node:18-bullseye-slim
+# Gunakan image resmi Node.js versi 20 (Dibutuhkan secara wajib oleh Baileys)
+FROM node:20-bullseye-slim
 
 # Set direktori kerja di dalam kontainer
 WORKDIR /usr/src/app
