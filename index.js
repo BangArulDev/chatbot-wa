@@ -65,7 +65,6 @@ const client = new Client({
   qrMaxRetries: 3,       // Maksimal generasi ulang QR Code sebelum menyerah
   puppeteer: {
     headless: true,
-    // Argumen tambahan untuk mencegah ERR_NAME_NOT_RESOLVED di cloud (Hugging Face / Docker)
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
@@ -74,8 +73,12 @@ const client = new Client({
       "--no-first-run",
       "--no-zygote",
       "--disable-gpu",
-      "--proxy-server='direct://'", // Bypass proxy bawaan network cloud yang sering jadi penyebab DNS error
+      "--proxy-server='direct://'", // Bypass proxy bawaan network cloud
       "--proxy-bypass-list=*",
+      "--disable-features=IsolateOrigins,site-per-process", // Trik Jitu: Matikan isolasi situs hemat ratusan MB RAM!
+      "--disable-site-isolation-trials",
+      "--disable-extensions", // Matikan semua ekstensi beban
+      "--js-flags=\"--max-old-space-size=256\"", // Batasi RAM mesin V8 maksimal 256MB per tab!
     ],
   },
 });
