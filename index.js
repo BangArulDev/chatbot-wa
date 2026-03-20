@@ -1,6 +1,7 @@
 require("dotenv").config();
 const { Client, LocalAuth } = require("whatsapp-web.js");
 const qrcode = require("qrcode-terminal");
+const qrcodeImage = require("qrcode");
 const { HfInference } = require("@huggingface/inference");
 const express = require("express");
 const mammoth = require("mammoth");
@@ -13,8 +14,14 @@ const app = express();
 // Standar port cloud Koyeb adalah 8000
 const port = process.env.PORT || 8000;
 
+let qrCodeHtml = "<h2>Sedang memuat sistem WhatsApp (biasanya butuh waktu sekitar 1-2 menit di Render)...</h2> <p>Jika layar masih ini terus, tunggu sebentar lalu coba <b>Refresh (F5)</b> halaman ini sampai gambarnya keluar.</p>";
+
 app.get("/", (req, res) => {
-  res.send("WhatsApp Bot is running! 🤖");
+  res.send("WhatsApp Bot is running! 🤖 Cek <b>/qr</b> untuk scan login.");
+});
+
+app.get("/qr", (req, res) => {
+  res.send(qrCodeHtml);
 });
 
 app.listen(port, () => {
@@ -72,13 +79,25 @@ const client = new Client({
 
 // Memicu pembuatan QR code di terminal saat pertama kali login
 client.on("qr", (qr) => {
-  console.log("\n📱 Scan QR code ini di WhatsApp Anda untuk login:");
-  qrcode.generate(qr, { small: true });
+  console.log("\n📱 QR code telah berhasil digenerate! Silakan cek web /qr untuk menscan gambarnya.");
+  qrcode.generate(qr, { small: true }); // Tetap print ke terminal jaga-jaga
+  
+  qrcodeImage.toDataURL(qr, (err, url) => {
+    qrCodeHtml = `
+      <div style="font-family: sans-serif; text-align: center; margin-top: 50px;">
+        <h2>📱 Silakan Scan QR Code Ini di HP Anda!</h2>
+        <img src="${url}" style="width: 300px; height: 300px; border: 2px solid #ccc; border-radius: 10px; padding: 10px;" />
+        <p>Buka <b>WhatsApp > Perangkat Tertaut > Tautkan Perangkat</b>.</p>
+        <p><i>(Jika barcode pudar atau masa waktu habis, coba Refresh / F5 halaman ini)</i></p>
+      </div>
+    `;
+  });
 });
 
 // Event saat bot berhasil terhubung
 client.on("ready", () => {
   console.log("✅ Bot sudah siap dan terhubung ke WhatsApp!");
+  qrCodeHtml = "<h2>✅ Bot Anda telah sukses terkoneksi! Selamat online 24 Jam!</h2> <p>Bot kini sedang online dan tidak butuh scan QR lagi.</p>";
 });
 
 // Event saat bot menerima pesan baru
