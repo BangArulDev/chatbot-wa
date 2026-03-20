@@ -71,7 +71,7 @@ async function connectToWhatsApp() {
     auth: state,
     printQRInTerminal: false, // Dimatikan agar kita bisa modifikasi QR nya ke terminal dan Web sekaligus
     logger: pino({ level: "silent" }), // Supaya log terminal tidak dibanjiri kode debug Baileys
-    browser: ["Boti AI", "Chrome", "1.0.0"],
+    browser: ["Asisten AI", "Chrome", "1.0.0"],
     connectTimeoutMs: 60000,
   });
 
@@ -149,7 +149,6 @@ async function connectToWhatsApp() {
     }
 
     console.log(`💬 Menerima pesan dari ${from.split("@")[0]}: "${textBody}"`);
-    await sock.sendMessage(from, { text: "⏳ Boti sedang memikirkan jawaban..." });
 
     // Tangkap Lampiran Dokumen jika Ada
     let documentText = "";
