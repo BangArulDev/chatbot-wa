@@ -20,10 +20,13 @@ const pdfParse = require("pdf-parse");
 const app = express();
 const port = process.env.PORT || 8000;
 
-let qrCodeHtml = "<h2>Sedang memuat sistem WhatsApp (menggunakan Baileys)...</h2> <p>Tunggu sebentar lalu coba <b>Refresh (F5)</b>.</p>";
+let qrCodeHtml =
+  "<h2>Sedang memuat sistem WhatsApp (menggunakan Baileys)...</h2> <p>Tunggu sebentar lalu coba <b>Refresh (F5)</b>.</p>";
 
 app.get("/", (req, res) => {
-  res.send("WhatsApp Bot (Baileys) is running! 🤖 Cek <b>/qr</b> untuk scan login.");
+  res.send(
+    "WhatsApp Bot (Baileys) is running! 🤖 Cek <b>/qr</b> untuk scan login.",
+  );
 });
 
 app.get("/qr", (req, res) => {
@@ -64,7 +67,9 @@ async function connectToWhatsApp() {
   const { state, saveCreds } = await useMultiFileAuthState("auth_info_baileys");
   // Mengambil versi WA resmi mutakhir agar tidak auto-kick dari server pusat
   const { version, isLatest } = await fetchLatestBaileysVersion();
-  console.log(`📱 Menggunakan WhatsApp Web v${version.join(".")}, Mutakhir: ${isLatest}`);
+  console.log(
+    `📱 Menggunakan WhatsApp Web v${version.join(".")}, Mutakhir: ${isLatest}`,
+  );
 
   const sock = makeWASocket({
     version, // Sembunyikan identitas bot dengan mengelabui masuk ke WA versi terbaru
@@ -83,7 +88,9 @@ async function connectToWhatsApp() {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      console.log("\n📱 QR code telah berhasil digenerate! Silakan cek web /qr untuk menscan gambarnya.");
+      console.log(
+        "\n📱 QR code telah berhasil digenerate! Silakan cek web /qr untuk menscan gambarnya.",
+      );
       qrcode.generate(qr, { small: true });
 
       qrcodeImage.toDataURL(qr, (err, url) => {
@@ -99,19 +106,29 @@ async function connectToWhatsApp() {
     }
 
     if (connection === "close") {
-      const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
-      const errMsg = lastDisconnect.error?.message || lastDisconnect.error?.toString() || "Unknown Error";
-      console.log(`❌ Koleksi ke pusat terputus. Alasan: ${errMsg} | Coba ulang: ${shouldReconnect}`);
-      
-      qrCodeHtml = "<h2>Koneksi terputus dari satelit WA Pusat. Sedang mencoba auto-reconnect perlahan... Tunggu semenit ya.</h2>";
-      
+      const shouldReconnect =
+        lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
+      const errMsg =
+        lastDisconnect.error?.message ||
+        lastDisconnect.error?.toString() ||
+        "Unknown Error";
+      console.log(
+        `❌ Koleksi ke pusat terputus. Alasan: ${errMsg} | Coba ulang: ${shouldReconnect}`,
+      );
+
+      qrCodeHtml =
+        "<h2>Koneksi terputus dari satelit WA Pusat. Sedang mencoba auto-reconnect perlahan... Tunggu semenit ya.</h2>";
+
       if (shouldReconnect) {
         // Penting: Beri rehat 5 detik per siklus restart bot agar server 512MB Render tidak kepanasan & Crash (SIGTERM)
         setTimeout(() => connectToWhatsApp(), 5000);
       }
     } else if (connection === "open") {
-      console.log("✅ Bot sudah siap dan terhubung ke WhatsApp lewat Baileys (Tanpa Chrome)!");
-      qrCodeHtml = "<h2>✅ Bot Anda telah sukses terkoneksi! Selamat online 24 Jam!</h2> <p>Bot Baileys kini sedang online dan memakan RAM super kecil.</p>";
+      console.log(
+        "✅ Bot sudah siap dan terhubung ke WhatsApp lewat Baileys (Tanpa Chrome)!",
+      );
+      qrCodeHtml =
+        "<h2>✅ Bot Anda telah sukses terkoneksi! Selamat online 24 Jam!</h2> <p>Bot Baileys kini sedang online dan memakan RAM super kecil.</p>";
     }
   });
 
@@ -124,7 +141,7 @@ async function connectToWhatsApp() {
     const from = msg.key.remoteJid;
     // Mendeteksi jenis isi pesannya (teks biasa, teks balasan, atau file)
     const messageType = Object.keys(msg.message)[0];
-    
+
     let textBody = "";
     if (messageType === "conversation") {
       textBody = msg.message.conversation;
@@ -137,14 +154,14 @@ async function connectToWhatsApp() {
     // Filter Trigger Kata Kunci (hanya merespons yg mengandung kata boti/sayang/rovi cantik)
     const lowerCaseBody = textBody.toLowerCase();
     const hasKeyword =
-      lowerCaseBody.includes("boti") ||
-      lowerCaseBody.includes("sayang") ||
-      lowerCaseBody.includes("rovi cantik");
+      lowerCaseBody.includes("boti") || lowerCaseBody.includes("sayang");
 
     if (!hasKeyword) return;
 
     if (!process.env.HF_TOKEN) {
-      await sock.sendMessage(from, { text: "Maaf, konfigurasiku belum selesai. API Key Hugging Face belum dimasukkan di .env atau server." });
+      await sock.sendMessage(from, {
+        text: "Maaf, konfigurasiku belum selesai. API Key Hugging Face belum dimasukkan di .env atau server.",
+      });
       return;
     }
 
@@ -160,15 +177,24 @@ async function connectToWhatsApp() {
 
         if (
           mimetype === "text/plain" ||
-          mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+          mimetype ===
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
           mimetype === "application/pdf"
         ) {
           // Sistem unduh gambar milik Baileys
-          const buffer = await downloadMediaMessage(msg, "buffer", {}, { logger: pino({ level: "silent" }) });
+          const buffer = await downloadMediaMessage(
+            msg,
+            "buffer",
+            {},
+            { logger: pino({ level: "silent" }) },
+          );
 
           if (mimetype === "text/plain") {
             documentText = buffer.toString("utf-8");
-          } else if (mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+          } else if (
+            mimetype ===
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          ) {
             const result = await mammoth.extractRawText({ buffer });
             documentText = result.value;
           } else if (mimetype === "application/pdf") {
@@ -178,7 +204,9 @@ async function connectToWhatsApp() {
 
           // Cek batas teks (Jangan paksakan AI membaca lebih dari 10.000 karakter)
           if (documentText.length > MAX_DOC_LENGTH) {
-            documentText = documentText.substring(0, MAX_DOC_LENGTH) + "\n...[TEKS DIPOTONG KARENA TERLALU PANJANG]";
+            documentText =
+              documentText.substring(0, MAX_DOC_LENGTH) +
+              "\n...[TEKS DIPOTONG KARENA TERLALU PANJANG]";
           }
           console.log(`📄 Berhasil membaca dokumen: ${filename}`);
         }
@@ -218,10 +246,13 @@ async function connectToWhatsApp() {
 
       aiReply = response.choices[0].message.content.trim();
       history.push({ role: "assistant", content: aiReply });
-      console.log(`🤖 Bot membalas: "${aiReply.substring(0, 30).replace(/\n/g, "")}..."`);
+      console.log(
+        `🤖 Bot membalas: "${aiReply.substring(0, 30).replace(/\n/g, "")}..."`,
+      );
     } catch (error) {
       console.error("❌ Error Hugging Face API:", error.message);
-      aiReply = "Maaf, aku sedang pusing (ada gangguan dengan koneksi AI utama). Coba tanya lagi nanti ya! 😢";
+      aiReply =
+        "Maaf, aku sedang pusing (ada gangguan dengan koneksi AI utama). Coba tanya lagi nanti ya! 😢";
     }
 
     // Kirim Balasan Akhir
