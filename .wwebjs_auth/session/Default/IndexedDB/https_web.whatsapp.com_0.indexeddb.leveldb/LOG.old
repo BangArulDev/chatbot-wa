@@ -1,0 +1,30 @@
+2026/03/20-22:47:19.704 12b8 Reusing MANIFEST C:\Users\amrul\OneDrive\Documents\ARUL\chatbot-wa\.wwebjs_auth\session\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
+2026/03/20-22:47:19.705 12b8 Recovering log #843
+2026/03/20-22:47:19.741 12b8 Reusing old log C:\Users\amrul\OneDrive\Documents\ARUL\chatbot-wa\.wwebjs_auth\session\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/000843.log 
+2026/03/20-22:47:50.079 24f4 Level-0 table #857: started
+2026/03/20-22:47:50.339 24f4 Level-0 table #857: 1270282 bytes OK
+2026/03/20-22:47:50.358 24f4 Delete type=0 #843
+2026/03/20-22:47:50.704 5164 Compacting 1@1 + 10@2 files
+2026/03/20-22:47:51.260 5164 Generated table #858@1: 66271 keys, 2208166 bytes
+2026/03/20-22:47:51.765 5164 Generated table #859@1: 97298 keys, 2249098 bytes
+2026/03/20-22:47:52.104 5164 Generated table #860@1: 77299 keys, 2298456 bytes
+2026/03/20-22:47:52.452 5164 Generated table #861@1: 29227 keys, 2194169 bytes
+2026/03/20-22:47:53.015 5164 Generated table #862@1: 62988 keys, 2232114 bytes
+2026/03/20-22:47:53.289 5164 Generated table #863@1: 19070 keys, 2171336 bytes
+2026/03/20-22:47:53.472 5164 Generated table #864@1: 3926 keys, 2144591 bytes
+2026/03/20-22:47:53.923 5164 Generated table #865@1: 28623 keys, 2217959 bytes
+2026/03/20-22:47:54.287 5164 Generated table #866@1: 26160 keys, 2167937 bytes
+2026/03/20-22:47:54.432 5164 Generated table #867@1: 9453 keys, 909145 bytes
+2026/03/20-22:47:54.432 5164 Compacted 1@1 + 10@2 files => 20792971 bytes
+2026/03/20-22:47:54.453 5164 compacted to: files[ 0 0 10 0 0 0 0 ]
+2026/03/20-22:47:54.460 5164 Delete type=2 #845
+2026/03/20-22:47:54.460 5164 Delete type=2 #846
+2026/03/20-22:47:54.462 5164 Delete type=2 #847
+2026/03/20-22:47:54.467 5164 Delete type=2 #848
+2026/03/20-22:47:54.467 5164 Delete type=2 #849
+2026/03/20-22:47:54.467 5164 Delete type=2 #850
+2026/03/20-22:47:54.468 5164 Delete type=2 #851
+2026/03/20-22:47:54.468 5164 Delete type=2 #852
+2026/03/20-22:47:54.468 5164 Delete type=2 #853
+2026/03/20-22:47:54.468 5164 Delete type=2 #854
+2026/03/20-22:47:54.471 5164 Delete type=2 #857
