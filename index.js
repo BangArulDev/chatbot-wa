@@ -4,6 +4,7 @@ const {
   useMultiFileAuthState,
   DisconnectReason,
   downloadMediaMessage,
+  fetchLatestBaileysVersion,
 } = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const qrcode = require("qrcode-terminal");
@@ -61,12 +62,17 @@ const MAX_DOC_LENGTH = 10000;
 async function connectToWhatsApp() {
   // Folder khusus Baileys untuk menyimpan sesi login
   const { state, saveCreds } = await useMultiFileAuthState("auth_info_baileys");
+  // Mengambil versi WA resmi mutakhir agar tidak auto-kick dari server pusat
+  const { version, isLatest } = await fetchLatestBaileysVersion();
+  console.log(`📱 Menggunakan WhatsApp Web v${version.join(".")}, Mutakhir: ${isLatest}`);
 
   const sock = makeWASocket({
+    version, // Sembunyikan identitas bot dengan mengelabui masuk ke WA versi terbaru
     auth: state,
     printQRInTerminal: false, // Dimatikan agar kita bisa modifikasi QR nya ke terminal dan Web sekaligus
     logger: pino({ level: "silent" }), // Supaya log terminal tidak dibanjiri kode debug Baileys
     browser: ["Boti AI", "Chrome", "1.0.0"],
+    connectTimeoutMs: 60000,
   });
 
   // Simpan login ke file secara berkala
@@ -93,14 +99,15 @@ async function connectToWhatsApp() {
     }
 
     if (connection === "close") {
-      const shouldReconnect =
-        lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
-      console.log("❌ Koneksi tertutup. Alasan:", lastDisconnect.error?.message, "| Reconnecting:", shouldReconnect);
+      const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
+      const errMsg = lastDisconnect.error?.message || lastDisconnect.error?.toString() || "Unknown Error";
+      console.log(`❌ Koleksi ke pusat terputus. Alasan: ${errMsg} | Coba ulang: ${shouldReconnect}`);
       
-      qrCodeHtml = "<h2>Koneksi terputus. Sedang mencoba auto-reconnect... Coba refresh sesaat lagi.</h2>";
+      qrCodeHtml = "<h2>Koneksi terputus dari satelit WA Pusat. Sedang mencoba auto-reconnect perlahan... Tunggu semenit ya.</h2>";
       
       if (shouldReconnect) {
-        connectToWhatsApp(); // Restart bot otomatis jika error kecil
+        // Penting: Beri rehat 5 detik per siklus restart bot agar server 512MB Render tidak kepanasan & Crash (SIGTERM)
+        setTimeout(() => connectToWhatsApp(), 5000);
       }
     } else if (connection === "open") {
       console.log("✅ Bot sudah siap dan terhubung ke WhatsApp lewat Baileys (Tanpa Chrome)!");
